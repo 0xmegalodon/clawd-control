@@ -120,7 +120,7 @@ Clawd Control is a standalone open-source project. It pairs well with [Temaki.ai
 ## Community
 
 - 🌐 [clawdcontrol.com](https://clawdcontrol.com) — Landing page & waitlist
-- 💬 [Discord](https://discord.com/invite/clawd) — Chat with other Clawdbot users
+- 💬 [Discord](https://discord.gg/NveJTZaD) — Join the community
 - 📖 [Clawdbot Docs](https://docs.clawd.bot) — Full documentation
 - 🐛 [Issues](https://github.com/Temaki-AI/clawd-control/issues) — Bug reports and feature requests
 
