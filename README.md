@@ -27,7 +27,7 @@ Clawd Control gives you a single-screen view of your entire AI agent fleet. If y
 
 ```bash
 # Clone
-git clone https://github.com/clawdbot/clawd-control.git
+git clone https://github.com/Temaki-AI/clawd-control.git
 cd clawd-control
 npm install
 
@@ -119,9 +119,10 @@ Clawd Control is a standalone open-source project. It pairs well with [Temaki.ai
 
 ## Community
 
+- 🌐 [clawdcontrol.com](https://clawdcontrol.com) — Landing page & waitlist
 - 💬 [Discord](https://discord.com/invite/clawd) — Chat with other Clawdbot users
 - 📖 [Clawdbot Docs](https://docs.clawd.bot) — Full documentation
-- 🐛 [Issues](https://github.com/clawdbot/clawd-control/issues) — Bug reports and feature requests
+- 🐛 [Issues](https://github.com/Temaki-AI/clawd-control/issues) — Bug reports and feature requests
 
 ## Contributing
 
