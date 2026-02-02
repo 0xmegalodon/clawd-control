@@ -1217,7 +1217,8 @@ const server = createServer((req, res) => {
 
       // Proxy to gateway API
       const gatewayUrl = `http://127.0.0.1:${port}/api/cron/list`;
-      const gatewayReq = http.request(gatewayUrl, {
+      const { request } = await import('http');
+      const gatewayReq = request(gatewayUrl, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,
