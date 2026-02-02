@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Session Waterfall — Clawd Control</title>
+<style>
+/* ═══════════════════════════════════════════
+   WATERFALL — Page-specific styles
+   Layout, sidebar, topbar, theme, design system
+   provided by layout.js
+   ═══════════════════════════════════════════ */
+
+/* ── Page Layout ───────────────────────── */
+.page-header {
+  margin-bottom: 24px;
+}
+.page-header h1 {
+  font-size: 1.5rem; font-weight: 800; letter-spacing: -0.02em;
+  display: flex; align-items: center; gap: 10px;
+}
+.page-header p {
+  font-size: 0.82rem; color: var(--text-tertiary); margin-top: 4px;
+}
+
+/* ── Controls Bar ──────────────────────── */
+.controls {
+  display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+  margin-bottom: 16px; padding: 12px 16px;
+  background: var(--surface); border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+.control-group { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 200px; }
+.control-label {
+  font-size: 0.65rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--text-tertiary); white-space: nowrap;
+}
+.control-select {
+  flex: 1; padding: 6px 10px; border-radius: var(--radius-sm);
+  background: var(--bg-primary); border: 1px solid var(--border-subtle);
+  color: var(--text-primary); font-family: var(--font-sans);
+  font-size: 0.8rem; cursor: pointer; max-width: 300px;
+}
+.control-select:focus { border-color: var(--accent); outline: none; }
+
+/* ── Stats Grid ────────────────────────── */
+.stats-grid {
+  display: grid; grid-template-columns: repeat(5, 1fr);
+  gap: 12px; margin-bottom: 16px;
+}
+.stat-card {
+  background: var(--surface); border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md); padding: 14px 16px;
+  transition: all 0.35s ease;
+}
+.stat-card:hover { border-color: var(--border); }
+[data-theme="light"] .stat-card { box-shadow: var(--shadow-sm); }
+.stat-label {
+  font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--text-tertiary); margin-bottom: 4px; font-weight: 600;
+}
+.stat-value {
+  font-size: 1.5rem; font-weight: 800; line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.stat-value.accent { color: var(--accent); }
+.stat-value.success { color: var(--success); }
+.stat-value.info { color: var(--info); }
+.stat-sub { font-size: 0.7rem; color: var(--text-tertiary); margin-top: 4px; }
+
+/* ── Waterfall Container ───────────────── */
+.waterfall-card {
+  background: var(--surface); border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md); padding: 16px;
+  margin-bottom: 12px;
+}
+.waterfall-card:hover { border-color: var(--border); }
+[data-theme="light"] .waterfall-card { box-shadow: var(--shadow-sm); }
+
+.waterfall-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border-subtle);
+}
+.waterfall-title {
+  font-size: 0.85rem; font-weight: 700; color: var(--text-primary);
+  display: flex; align-items: center; gap: 6px;
+}
+
+/* ── Waterfall Timeline ────────────────── */
+.timeline {
+  display: flex; flex-direction: column; gap: 4px; padding: 8px 0;
+}
+
+.timeline-item {
+  position: relative; display: flex; align-items: stretch;
+  min-height: 32px; border-radius: var(--radius-sm);
+  transition: all 0.2s; cursor: pointer;
+}
+.timeline-item:hover { transform: translateX(4px); }
+
+.timeline-marker {
+  width: 80px; display: flex; flex-direction: column; justify-content: center;
+  padding: 4px 8px; font-size: 0.7rem; color: var(--text-tertiary);
+  border-right: 1px solid var(--border-subtle); flex-shrink: 0;
+}
+.timeline-time { font-variant-numeric: tabular-nums; font-weight: 600; }
+.timeline-delta { font-size: 0.6rem; opacity: 0.6; }
+
+.timeline-bar-container {
+  flex: 1; display: flex; align-items: center; padding-left: 8px;
+  position: relative;
+}
+
+.timeline-bar {
+  height: 28px; border-radius: var(--radius-sm);
+  display: flex; align-items: center; padding: 0 10px; gap: 6px;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative; min-width: 40px; max-width: 100%;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+
+.timeline-bar.user {
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  color: white;
+}
+.timeline-bar.assistant {
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  color: white;
+}
+.timeline-bar.tool {
+  background: linear-gradient(135deg, #c9a44a, #b8922f);
+  color: var(--bg-primary);
+}
+.timeline-bar.thinking {
+  background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+  color: white;
+}
+.timeline-bar.system {
+  background: linear-gradient(135deg, #71717a, #52525b);
+  color: white;
+}
+
+.timeline-icon {
+  font-size: 0.9rem; flex-shrink: 0;
+}
+
+.timeline-label {
+  font-size: 0.75rem; font-weight: 600; flex: 1;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.timeline-stats {
+  display: flex; gap: 8px; font-size: 0.65rem; font-weight: 700;
+  font-variant-numeric: tabular-nums; flex-shrink: 0;
+  opacity: 0.9;
+}
+
+/* ── Tool Call Nested Bars ─────────────── */
+.timeline-tools {
+  margin-left: 88px; margin-top: 2px; display: flex; flex-direction: column; gap: 2px;
+}
+
+.tool-bar {
+  height: 20px; border-radius: var(--radius-sm);
+  display: flex; align-items: center; padding: 0 8px; gap: 4px;
+  background: rgba(201, 164, 74, 0.2);
+  border-left: 3px solid var(--accent);
+  font-size: 0.7rem; color: var(--text-secondary);
+}
+
+.tool-name {
+  font-weight: 600; color: var(--accent);
+}
+
+/* ── Detail Panel ──────────────────────── */
+.detail-panel {
+  display: none; margin-top: 4px; margin-left: 88px;
+  background: var(--bg-primary); border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm); padding: 12px;
+  animation: slideDown 0.2s ease-out;
+}
+.detail-panel.open { display: block; }
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.detail-section {
+  margin-bottom: 12px;
+}
+.detail-section:last-child { margin-bottom: 0; }
+
+.detail-heading {
+  font-size: 0.65rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--text-tertiary); margin-bottom: 6px;
+}
+
+.detail-text {
+  font-size: 0.8rem; color: var(--text-secondary); line-height: 1.5;
+  font-family: var(--font-mono); white-space: pre-wrap;
+  background: var(--surface); padding: 8px; border-radius: var(--radius-sm);
+  max-height: 200px; overflow-y: auto;
+}
+
+.detail-grid {
+  display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;
+}
+
+.detail-item {
+  background: var(--surface); padding: 8px; border-radius: var(--radius-sm);
+}
+
+.detail-item-label {
+  font-size: 0.65rem; font-weight: 700; color: var(--text-tertiary);
+  text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 2px;
+}
+
+.detail-item-value {
+  font-size: 0.85rem; font-weight: 600; color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Loading/Empty States ──────────────── */
+.loading-state, .empty-state {
+  text-align: center; padding: 40px 20px; color: var(--text-tertiary);
+}
+.loading-state .icon, .empty-state .icon { font-size: 2rem; margin-bottom: 12px; opacity: 0.4; }
+.loading-state p, .empty-state p { font-size: 0.85rem; }
+
+/* ── Responsive ────────────────────────── */
+@media (max-width: 900px) {
+  .stats-grid { grid-template-columns: repeat(3, 1fr); }
+  .timeline-marker { width: 60px; font-size: 0.65rem; }
+  .timeline-tools { margin-left: 68px; }
+  .detail-panel { margin-left: 68px; }
+}
+
+@keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+.fade-up { animation: fadeUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) both; }
+</style>
+</head>
+<body>
+
+<main class="main">
+  <div class="page-header fade-up">
+    <h1>📊 Session Waterfall</h1>
+    <p>Timeline visualization of LLM calls, tool executions, and thinking blocks</p>
+  </div>
+
+  <div class="controls fade-up" style="animation-delay:.05s">
+    <div class="control-group">
+      <span class="control-label">Session</span>
+      <select class="control-select" id="sessionSelect" onchange="loadSessionTrace()">
+        <option value="">Loading sessions...</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="stats-grid fade-up" style="animation-delay:.1s">
+    <div class="stat-card">
+      <div class="stat-label">Total Duration</div>
+      <div class="stat-value info" id="statDuration">—</div>
+      <div class="stat-sub" id="statDurationSub">Session length</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Total Cost</div>
+      <div class="stat-value accent" id="statCost">—</div>
+      <div class="stat-sub" id="statCostSub">API costs</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Total Tokens</div>
+      <div class="stat-value success" id="statTokens">—</div>
+      <div class="stat-sub" id="statTokensSub">All messages</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Messages</div>
+      <div class="stat-value" style="color: var(--text-primary)" id="statMessages">—</div>
+      <div class="stat-sub" id="statMessagesSub">Turns</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Cache Reads</div>
+      <div class="stat-value" style="color: var(--accent)" id="statCache">—</div>
+      <div class="stat-sub" id="statCacheSub">Cached tokens</div>
+    </div>
+  </div>
+
+  <div class="waterfall-card fade-up" style="animation-delay:.15s">
+    <div class="waterfall-header">
+      <div class="waterfall-title">
+        <i data-lucide="activity"></i>
+        Timeline
+      </div>
+    </div>
+    <div id="timeline" class="timeline">
+      <div class="loading-state">
+        <div class="icon">⏳</div>
+        <p>Select a session to view the waterfall</p>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<script src="/layout.js"></script>
+<script>
+'use strict';
+
+const $ = s => document.querySelector(s);
+let currentTrace = null;
+
+// ═══════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════
+
+loadSessions();
+
+async function loadSessions() {
+  try {
+    const res = await fetch('/api/sessions');
+    const sessions = await res.json();
+    
+    const select = $('#sessionSelect');
+    if (sessions.length === 0) {
+      select.innerHTML = '<option value="">No sessions found</option>';
+      return;
+    }
+
+    select.innerHTML = '<option value="">— Select a session —</option>' + 
+      sessions.map(s => {
+        const time = s.updatedAt ? timeAgo(s.updatedAt) : 'unknown';
+        return `<option value="${s.key}">${s.agentEmoji} ${s.agentName} / ${s.displayName} (${time})</option>`;
+      }).join('');
+  } catch (e) {
+    console.error('Failed to load sessions:', e);
+    showToast('Failed to load sessions', 'error');
+  }
+}
+
+async function loadSessionTrace() {
+  const sessionKey = $('#sessionSelect').value;
+  if (!sessionKey) {
+    resetView();
+    return;
+  }
+
+  try {
+    const res = await fetch(`/api/session/${encodeURIComponent(sessionKey)}/trace`);
+    if (!res.ok) {
+      showToast('Session not found', 'error');
+      resetView();
+      return;
+    }
+
+    currentTrace = await res.json();
+    renderTrace();
+  } catch (e) {
+    console.error('Failed to load trace:', e);
+    showToast('Failed to load trace data', 'error');
+    resetView();
+  }
+}
+
+function resetView() {
+  currentTrace = null;
+  $('#statDuration').textContent = '—';
+  $('#statDurationSub').textContent = 'Session length';
+  $('#statCost').textContent = '—';
+  $('#statCostSub').textContent = 'API costs';
+  $('#statTokens').textContent = '—';
+  $('#statTokensSub').textContent = 'All messages';
+  $('#statMessages').textContent = '—';
+  $('#statMessagesSub').textContent = 'Turns';
+  $('#statCache').textContent = '—';
+  $('#statCacheSub').textContent = 'Cached tokens';
+  $('#timeline').innerHTML = '<div class="loading-state"><div class="icon">⏳</div><p>Select a session to view the waterfall</p></div>';
+}
+
+// ═══════════════════════════════════════════
+// RENDER TRACE
+// ═══════════════════════════════════════════
+
+function renderTrace() {
+  if (!currentTrace || !currentTrace.trace) {
+    resetView();
+    return;
+  }
+
+  const { trace, summary } = currentTrace;
+
+  // Render stats
+  $('#statDuration').textContent = formatDuration(summary.totalDuration);
+  $('#statDurationSub').textContent = `${trace.length} messages`;
+
+  $('#statCost').textContent = summary.totalCost > 0 ? `$${summary.totalCost.toFixed(4)}` : '$0.00';
+  $('#statCostSub').textContent = 'Total API cost';
+
+  $('#statTokens').textContent = formatNumber(summary.totalTokens);
+  $('#statTokensSub').textContent = `${formatNumber(summary.totalInput)} in / ${formatNumber(summary.totalOutput)} out`;
+
+  $('#statMessages').textContent = summary.messageCount;
+  $('#statMessagesSub').textContent = trace.filter(t => t.role === 'user').length + ' user turns';
+
+  $('#statCache').textContent = formatNumber(summary.totalCacheRead);
+  const cachePct = summary.totalTokens > 0 ? Math.round(summary.totalCacheRead / summary.totalTokens * 100) : 0;
+  $('#statCacheSub').textContent = cachePct > 0 ? `${cachePct}% of total` : 'No cache hits';
+
+  // Render timeline
+  if (trace.length === 0) {
+    $('#timeline').innerHTML = '<div class="empty-state"><div class="icon">📭</div><p>No messages in this session</p></div>';
+    return;
+  }
+
+  const maxDuration = Math.max(...trace.map(t => t.duration || 0), 1);
+  const timeline = $('#timeline');
+  timeline.innerHTML = '';
+
+  trace.forEach((msg, idx) => {
+    const item = createTimelineItem(msg, idx, maxDuration);
+    timeline.appendChild(item);
+  });
+
+  refreshIcons();
+}
+
+function createTimelineItem(msg, idx, maxDuration) {
+  const container = document.createElement('div');
+  
+  // Determine bar type and color
+  let barType = msg.role;
+  let icon = '💬';
+  let label = msg.role.charAt(0).toUpperCase() + msg.role.slice(1);
+
+  if (msg.role === 'user') {
+    icon = '👤';
+    label = 'User';
+  } else if (msg.role === 'assistant') {
+    if (msg.contentTypes.includes('toolCall')) {
+      barType = 'tool';
+      icon = '🛠️';
+      label = `${msg.toolCalls.length} tool call${msg.toolCalls.length > 1 ? 's' : ''}`;
+    } else if (msg.hasThinking) {
+      barType = 'thinking';
+      icon = '🤔';
+      label = 'Thinking';
+    } else {
+      icon = '🤖';
+      label = 'Assistant';
+    }
+  }
+
+  // Calculate bar width based on duration (logarithmic scale for better visual distribution)
+  const durationMs = msg.duration || 0;
+  const widthPct = durationMs > 0 ? Math.min(95, Math.log(durationMs + 1) / Math.log(maxDuration + 1) * 90 + 5) : 5;
+
+  // Format timestamp
+  const time = new Date(msg.timestamp);
+  const timeStr = time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const deltaStr = durationMs > 0 ? `+${formatDuration(durationMs)}` : '';
+
+  // Create timeline item
+  const itemEl = document.createElement('div');
+  itemEl.className = 'timeline-item';
+  itemEl.innerHTML = `
+    <div class="timeline-marker">
+      <div class="timeline-time">${timeStr}</div>
+      ${deltaStr ? `<div class="timeline-delta">${deltaStr}</div>` : ''}
+    </div>
+    <div class="timeline-bar-container">
+      <div class="timeline-bar ${barType}" style="width: ${widthPct}%">
+        <span class="timeline-icon">${icon}</span>
+        <span class="timeline-label">${label}</span>
+        <span class="timeline-stats">
+          ${msg.usage.total > 0 ? `<span>${formatNumber(msg.usage.total)} tok</span>` : ''}
+          ${msg.cost > 0 ? `<span>$${msg.cost.toFixed(4)}</span>` : ''}
+        </span>
+      </div>
+    </div>
+  `;
+
+  // Add click handler to expand details
+  itemEl.addEventListener('click', (e) => {
+    if (e.target.closest('.tool-bar')) return; // Don't toggle when clicking tool bars
+    toggleDetails(container, msg);
+  });
+
+  container.appendChild(itemEl);
+
+  // Add tool call bars if present
+  if (msg.toolCalls && msg.toolCalls.length > 0) {
+    const toolsEl = document.createElement('div');
+    toolsEl.className = 'timeline-tools';
+    msg.toolCalls.forEach(tool => {
+      const toolBar = document.createElement('div');
+      toolBar.className = 'tool-bar';
+      toolBar.innerHTML = `<span class="tool-name">${tool.name}</span>`;
+      toolBar.title = JSON.stringify(tool.arguments, null, 2);
+      toolsEl.appendChild(toolBar);
+    });
+    container.appendChild(toolsEl);
+  }
+
+  return container;
+}
+
+function toggleDetails(container, msg) {
+  let detailPanel = container.querySelector('.detail-panel');
+  
+  if (detailPanel) {
+    detailPanel.classList.toggle('open');
+    return;
+  }
+
+  // Create detail panel
+  detailPanel = document.createElement('div');
+  detailPanel.className = 'detail-panel open';
+
+  let html = '';
+
+  // Message text
+  if (msg.fullText) {
+    html += `
+      <div class="detail-section">
+        <div class="detail-heading">Message Text</div>
+        <div class="detail-text">${escapeHtml(msg.fullText)}</div>
+      </div>
+    `;
+  }
+
+  // Usage stats
+  html += `
+    <div class="detail-section">
+      <div class="detail-heading">Token Usage & Cost</div>
+      <div class="detail-grid">
+        <div class="detail-item">
+          <div class="detail-item-label">Input Tokens</div>
+          <div class="detail-item-value">${formatNumber(msg.usage.input)}</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-item-label">Output Tokens</div>
+          <div class="detail-item-value">${formatNumber(msg.usage.output)}</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-item-label">Cache Reads</div>
+          <div class="detail-item-value">${formatNumber(msg.usage.cacheRead)}</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-item-label">Cost</div>
+          <div class="detail-item-value">$${msg.cost.toFixed(6)}</div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Model & metadata
+  html += `
+    <div class="detail-section">
+      <div class="detail-heading">Metadata</div>
+      <div class="detail-grid">
+        <div class="detail-item">
+          <div class="detail-item-label">Model</div>
+          <div class="detail-item-value">${msg.model}</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-item-label">Stop Reason</div>
+          <div class="detail-item-value">${msg.stopReason || 'none'}</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-item-label">Content Types</div>
+          <div class="detail-item-value">${msg.contentTypes.join(', ') || 'none'}</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-item-label">Timestamp</div>
+          <div class="detail-item-value" style="font-size: 0.7rem">${new Date(msg.timestamp).toLocaleString()}</div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Tool calls detail
+  if (msg.toolCalls && msg.toolCalls.length > 0) {
+    html += `
+      <div class="detail-section">
+        <div class="detail-heading">Tool Calls</div>
+        <div class="detail-text">${escapeHtml(JSON.stringify(msg.toolCalls, null, 2))}</div>
+      </div>
+    `;
+  }
+
+  detailPanel.innerHTML = html;
+  container.appendChild(detailPanel);
+}
+
+// ═══════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════
+
+function formatDuration(ms) {
+  if (ms < 1000) return `${ms}ms`;
+  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
+  if (ms < 3600000) return `${Math.floor(ms / 60000)}m ${Math.floor((ms % 60000) / 1000)}s`;
+  const h = Math.floor(ms / 3600000);
+  const m = Math.floor((ms % 3600000) / 60000);
+  return `${h}h ${m}m`;
+}
+
+function formatNumber(n) {
+  if (n > 1e6) return (n / 1e6).toFixed(1) + 'M';
+  if (n > 1e3) return (n / 1e3).toFixed(1) + 'K';
+  return n.toString();
+}
+
+function timeAgo(ts) {
+  const d = Date.now() - ts;
+  if (d < 60000) return 'just now';
+  if (d < 3600000) return Math.floor(d / 60000) + 'm ago';
+  if (d < 86400000) return Math.floor(d / 3600000) + 'h ago';
+  return Math.floor(d / 86400000) + 'd ago';
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+</script>
+<script src="/lucide.min.js"></script>
+<script>lucide.createIcons();</script>
+</body>
+</html>

@@ -549,6 +549,213 @@ function getAnalytics(rangeStr, agentFilter) {
   };
 }
 
+// ── Session Trace (for waterfall view) ─────────────
+
+function getAllSessions() {
+  const AGENTS_DIR = join(homedir(), '.clawdbot', 'agents');
+  const sessions = [];
+
+  try {
+    const agentIds = readdirSync(AGENTS_DIR, { withFileTypes: true })
+      .filter(d => d.isDirectory())
+      .map(d => d.name);
+
+    for (const agentId of agentIds) {
+      const sessionsPath = join(AGENTS_DIR, agentId, 'sessions', 'sessions.json');
+      if (!existsSync(sessionsPath)) continue;
+
+      try {
+        const sessData = JSON.parse(readFileSync(sessionsPath, 'utf8'));
+        for (const [key, sess] of Object.entries(sessData)) {
+          if (!sess.sessionFile) continue;
+          
+          const agentInfo = collector.state.get(agentId) || {};
+          sessions.push({
+            key,
+            agentId,
+            agentName: agentInfo.name || agentId,
+            agentEmoji: agentInfo.emoji || '🤖',
+            sessionId: sess.sessionId,
+            displayName: sess.displayName || key.split(':').pop() || key,
+            updatedAt: sess.updatedAt,
+            sessionFile: sess.sessionFile,
+          });
+        }
+      } catch {
+        // Skip malformed sessions.json
+      }
+    }
+  } catch {
+    // No agents dir
+  }
+
+  // Sort by most recent first
+  sessions.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+  return sessions;
+}
+
+function getSessionTrace(sessionKey) {
+  const AGENTS_DIR = join(homedir(), '.clawdbot', 'agents');
+  
+  // Find the session file
+  let sessionFile = null;
+  let agentId = null;
+
+  try {
+    const agentIds = readdirSync(AGENTS_DIR, { withFileTypes: true })
+      .filter(d => d.isDirectory())
+      .map(d => d.name);
+
+    for (const aid of agentIds) {
+      const sessionsPath = join(AGENTS_DIR, aid, 'sessions', 'sessions.json');
+      if (!existsSync(sessionsPath)) continue;
+
+      try {
+        const sessData = JSON.parse(readFileSync(sessionsPath, 'utf8'));
+        if (sessData[sessionKey]) {
+          sessionFile = sessData[sessionKey].sessionFile;
+          agentId = aid;
+          break;
+        }
+      } catch {}
+    }
+  } catch {
+    return null;
+  }
+
+  if (!sessionFile || !existsSync(sessionFile)) return null;
+
+  // Parse the JSONL file
+  const trace = [];
+  let totalCost = 0;
+  let totalTokens = 0;
+  let totalInput = 0;
+  let totalOutput = 0;
+  let totalCacheRead = 0;
+  let messageCount = 0;
+  let currentModel = 'unknown';
+
+  try {
+    const content = readFileSync(sessionFile, 'utf8');
+    const lines = content.split('\n').filter(l => l.trim());
+
+    for (const line of lines) {
+      try {
+        const entry = JSON.parse(line);
+
+        // Track model changes
+        if (entry.type === 'model_change' && entry.modelId) {
+          currentModel = entry.modelId.replace('anthropic/', '').replace('openai/', '');
+        }
+
+        // Extract message data
+        if (entry.type === 'message' && entry.message) {
+          const msg = entry.message;
+          const timestamp = entry.timestamp;
+          const role = msg.role;
+          const usage = msg.usage || {};
+          const stopReason = msg.stopReason || '';
+
+          // Extract content types
+          const content = msg.content || [];
+          const contentTypes = [];
+          const toolCalls = [];
+          let hasThinking = false;
+          let textContent = '';
+
+          for (const item of content) {
+            if (item.type === 'text') {
+              textContent += item.text || '';
+            } else if (item.type === 'toolCall') {
+              toolCalls.push({
+                name: item.name,
+                arguments: item.arguments,
+                id: item.id,
+              });
+              if (!contentTypes.includes('toolCall')) contentTypes.push('toolCall');
+            } else if (item.type === 'thinking') {
+              hasThinking = true;
+              if (!contentTypes.includes('thinking')) contentTypes.push('thinking');
+            }
+          }
+
+          if (textContent && !contentTypes.includes('text')) {
+            contentTypes.push('text');
+          }
+
+          // Calculate cost and tokens
+          const inputTokens = usage.input || 0;
+          const outputTokens = usage.output || 0;
+          const cacheRead = usage.cacheRead || 0;
+          const cost = usage.cost?.total || 0;
+          const tokens = inputTokens + outputTokens + cacheRead;
+
+          totalCost += cost;
+          totalTokens += tokens;
+          totalInput += inputTokens;
+          totalOutput += outputTokens;
+          totalCacheRead += cacheRead;
+          messageCount++;
+
+          trace.push({
+            timestamp,
+            role,
+            contentTypes,
+            toolCalls,
+            hasThinking,
+            textPreview: textContent.substring(0, 200),
+            fullText: textContent,
+            model: currentModel,
+            stopReason,
+            usage: {
+              input: inputTokens,
+              output: outputTokens,
+              cacheRead,
+              total: tokens,
+            },
+            cost,
+          });
+        }
+      } catch {
+        // Skip malformed lines
+      }
+    }
+  } catch {
+    return null;
+  }
+
+  // Calculate durations (time between messages)
+  for (let i = 0; i < trace.length - 1; i++) {
+    const current = new Date(trace[i].timestamp).getTime();
+    const next = new Date(trace[i + 1].timestamp).getTime();
+    trace[i].duration = next - current;
+  }
+  if (trace.length > 0) {
+    trace[trace.length - 1].duration = 0; // Last message has no duration
+  }
+
+  const startTime = trace.length > 0 ? new Date(trace[0].timestamp).getTime() : 0;
+  const endTime = trace.length > 0 ? new Date(trace[trace.length - 1].timestamp).getTime() : 0;
+  const totalDuration = endTime - startTime;
+
+  return {
+    sessionKey,
+    agentId,
+    trace,
+    summary: {
+      totalCost,
+      totalTokens,
+      totalInput,
+      totalOutput,
+      totalCacheRead,
+      messageCount,
+      totalDuration,
+      startTime,
+      endTime,
+    },
+  };
+}
+
 // ── HTTP Server ─────────────────────────────────────
 
 const server = createServer((req, res) => {
@@ -685,6 +892,38 @@ const server = createServer((req, res) => {
       const range = url.searchParams.get('range') || '7';
       const agentFilter = url.searchParams.get('agent') || 'all';
       const result = getAnalytics(range, agentFilter);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(result));
+    } catch (e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: e.message }));
+    }
+    return;
+  }
+
+  // ── Session Trace (Waterfall Data) ──
+  if (path.startsWith('/api/session/') && path.endsWith('/trace') && req.method === 'GET') {
+    try {
+      const sessionKey = decodeURIComponent(path.split('/')[3]);
+      const result = getSessionTrace(sessionKey);
+      if (!result) {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Session not found' }));
+        return;
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(result));
+    } catch (e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: e.message }));
+    }
+    return;
+  }
+
+  // ── List Sessions ──
+  if (path === '/api/sessions' && req.method === 'GET') {
+    try {
+      const result = getAllSessions();
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(result));
     } catch (e) {
