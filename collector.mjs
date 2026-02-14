@@ -77,7 +77,7 @@ export class AgentCollector extends EventEmitter {
     // Remove empty gateways
     for (const [key, gw] of this.gateways) {
       if (gw.agents.length === 0) {
-        if (gw.ws) try { gw.ws.close(); } catch {}
+        if (gw.ws) try { gw.ws.close(); } catch { }
         if (gw.reconnectTimer) clearTimeout(gw.reconnectTimer);
         this.gateways.delete(key);
       }
@@ -111,7 +111,7 @@ export class AgentCollector extends EventEmitter {
   _connect(gwKey) {
     const gw = this.gateways.get(gwKey);
     if (!gw) return;
-    if (gw.ws) { try { gw.ws.close(); } catch {} }
+    if (gw.ws) { try { gw.ws.close(); } catch { } }
 
     const url = `ws://${gw.host}:${gw.port}`;
     let ws;
@@ -128,7 +128,7 @@ export class AgentCollector extends EventEmitter {
     ws.on('open', () => { gw.state = 'waiting-challenge'; });
 
     ws.on('message', (data) => {
-      try { this._handleMessage(gwKey, JSON.parse(data.toString())); } catch {}
+      try { this._handleMessage(gwKey, JSON.parse(data.toString())); } catch { }
     });
 
     ws.on('close', (code) => {
@@ -178,7 +178,10 @@ export class AgentCollector extends EventEmitter {
           type: 'req', id: String(++this._reqCounter), method: 'connect',
           params: {
             minProtocol: 3, maxProtocol: 3,
-            client: { id: 'clawdbot-probe', version: '2.0.0', platform: 'linux', mode: 'backend' },
+            client: { id: 'gateway-client', version: '2.0.0', platform: process.platform, mode: 'backend' },
+            role: 'operator',
+            scopes: ['operator.admin', 'operator.approvals', 'operator.pairing'],
+            caps: [],
             auth: { token: gw.token },
           },
         });
@@ -303,28 +306,73 @@ export class AgentCollector extends EventEmitter {
 
   _collectHostMetrics() {
     try {
-      const loadavg = readFileSync('/proc/loadavg', 'utf8').trim().split(' ');
-      const meminfo = readFileSync('/proc/meminfo', 'utf8');
-      const memTotal = parseInt(meminfo.match(/MemTotal:\s+(\d+)/)?.[1] || '0') * 1024;
-      const memAvail = parseInt(meminfo.match(/MemAvailable:\s+(\d+)/)?.[1] || '0') * 1024;
+      const isMac = process.platform === 'darwin';
+      const hostname = execSync('hostname', { encoding: 'utf8' }).trim();
 
+      // Load average
+      let loadAvg = [0, 0, 0];
+      try {
+        if (isMac) {
+          const sysctl = execSync('sysctl -n vm.loadavg', { encoding: 'utf8' }).trim();
+          // Output: { 0.52 0.58 0.59 }
+          const nums = sysctl.replace(/[{}]/g, '').trim().split(/\s+/);
+          loadAvg = nums.slice(0, 3).map(Number);
+        } else {
+          loadAvg = readFileSync('/proc/loadavg', 'utf8').trim().split(' ').slice(0, 3).map(Number);
+        }
+      } catch { }
+
+      // Memory
+      let memTotal = 0, memAvail = 0;
+      try {
+        if (isMac) {
+          const vmStat = execSync('vm_stat', { encoding: 'utf8' });
+          const pageSize = parseInt(execSync('sysctl -n hw.pagesize', { encoding: 'utf8' }).trim()) || 4096;
+          const totalBytes = parseInt(execSync('sysctl -n hw.memsize', { encoding: 'utf8' }).trim()) || 0;
+          const freePages = parseInt(vmStat.match(/Pages free:\s+(\d+)/)?.[1] || '0');
+          const inactivePages = parseInt(vmStat.match(/Pages inactive:\s+(\d+)/)?.[1] || '0');
+          memTotal = totalBytes;
+          memAvail = (freePages + inactivePages) * pageSize;
+        } else {
+          const meminfo = readFileSync('/proc/meminfo', 'utf8');
+          memTotal = parseInt(meminfo.match(/MemTotal:\s+(\d+)/)?.[1] || '0') * 1024;
+          memAvail = parseInt(meminfo.match(/MemAvailable:\s+(\d+)/)?.[1] || '0') * 1024;
+        }
+      } catch { }
+
+      // Disk
       let diskTotal = 0, diskUsed = 0;
       try {
-        const df = execSync('df -B1 / 2>/dev/null', { encoding: 'utf8' });
+        const dfFlag = isMac ? '-k' : '-B1';
+        const df = execSync(`df ${dfFlag} / 2>/dev/null`, { encoding: 'utf8' });
         const parts = df.split('\n')[1]?.split(/\s+/);
-        if (parts) { diskTotal = parseInt(parts[1]) || 0; diskUsed = parseInt(parts[2]) || 0; }
-      } catch {}
+        if (parts) {
+          const mult = isMac ? 1024 : 1;
+          diskTotal = (parseInt(parts[1]) || 0) * mult;
+          diskUsed = (parseInt(parts[2]) || 0) * mult;
+        }
+      } catch { }
 
-      const uptime = parseFloat(readFileSync('/proc/uptime', 'utf8').split(' ')[0]);
+      // Uptime
+      let uptime = 0;
+      try {
+        if (isMac) {
+          const boottime = execSync('sysctl -n kern.boottime', { encoding: 'utf8' });
+          const sec = parseInt(boottime.match(/sec\s*=\s*(\d+)/)?.[1] || '0');
+          uptime = sec ? Math.floor((Date.now() / 1000) - sec) : 0;
+        } else {
+          uptime = Math.floor(parseFloat(readFileSync('/proc/uptime', 'utf8').split(' ')[0]));
+        }
+      } catch { }
 
       this.hostMetrics = {
-        ts: Date.now(), hostname: execSync('hostname', { encoding: 'utf8' }).trim(),
-        loadAvg: loadavg.slice(0, 3).map(Number),
+        ts: Date.now(), hostname,
+        loadAvg,
         memory: { total: memTotal, used: memTotal - memAvail, available: memAvail },
         disk: { total: diskTotal, used: diskUsed },
-        uptime: Math.floor(uptime),
+        uptime,
       };
       this.emit('hostMetrics', this.hostMetrics);
-    } catch {}
+    } catch { }
   }
 }
